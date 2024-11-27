@@ -4,9 +4,9 @@ import os
 import json
 import datetime
 import glob
-from Crypto.PublicKey import RSA
-from Crypto.Cipher import PKCS1_OAEP, AES
-from Crypto.Random import get_random_bytes
+from Crypto.PublicKey import RSA # type: ignore
+from Crypto.Cipher import PKCS1_OAEP, AES # type: ignore
+from Crypto.Random import get_random_bytes # type: ignore
 
 
 
@@ -78,8 +78,8 @@ def sendEmailHandler(connectionSocket, cipherAES, sender):
     connectionSocket.send(cipherAES.encrypt("Send the email".encode().ljust(1024)))
     
     # receive an email from the client and decrypt it
-    encryptedEmail = connectionSocket.recv(1024)
-    emailContent = cipherAES.decrypt(encryptedEmail).strip('b\x00').decode()
+    encryptedEmail = connectionSocket.recv(1000000)
+    emailContent = cipherAES.decrypt(encryptedEmail).strip(b'\x00').decode().strip()
     
     # parse the content of the email so we can print it to the terminal
     lines = emailContent.split('\n')
@@ -121,7 +121,8 @@ def inboxListHandler(connectionSocket, cipherAES, username):
             sender = lines[0].split(': ')[1].strip()
             timestamp = lines[2].split(': ')[1].strip()
             title = lines[3].split(': ')[1].strip()
-            emails.append(f"{len(emails)+1} {sender} {timestamp} {title}")
+            # emails.append(f"{len(emails)+1} {sender} {timestamp} {title}")
+            emails.append(f"{len(emails)+1:<6} {sender:<8} {timestamp:<26} {title:<6}")
     
     inboxList = '\n'.join(emails)
     connectionSocket.send(cipherAES.encrypt(inboxList.encode().ljust(4096)))
@@ -172,7 +173,7 @@ def handleClient(connectionSocket, clientPublicKeys, cipherRSA, userCredentials)
         
         # receive acknowledgement from the client
         encryptedAck = connectionSocket.recv(1024)
-        decryptedAck = cipherAES.decrypt(encryptedAck).strip(b'\x00').decode()
+        decryptedAck = cipherAES.decrypt(encryptedAck).strip(b'\x00').decode().strip()
         
         if decryptedAck != 'OK':
             return
@@ -193,7 +194,8 @@ def handleClient(connectionSocket, clientPublicKeys, cipherRSA, userCredentials)
             # get the choice from the client
             encryptedChoice = connectionSocket.recv(1024)
             # when decrypting, strip the padding from the message
-            choice = cipherAES.decrypt(encryptedChoice).strip(b'\x00').decode()
+            choice = cipherAES.decrypt(encryptedChoice).strip(b'\x00').decode().strip()
+            print(username + ": " + choice);
             
             # send email
             if choice == '1':
@@ -246,39 +248,40 @@ def server(cipherRSA, clientPublicKeys, userCredentials):
     clientPublicKeys, cipherRSA = loadKeys()
     userCredentials = loadUserCredentials()
     
-    try:
-        #Server accepts client connection
-        connectionSocket, addr = serverSocket.accept()
+    while True:
+        try:
+            #Server accepts client connection
+            connectionSocket, addr = serverSocket.accept()
+            
+            # Fork for each client connection
+            pid = os.fork()
+            
+            # child process handling
+            if pid == 0:
+                serverSocket.close()        # close the parent's socket in the child process
+                handleClient(connectionSocket, clientPublicKeys, cipherRSA, userCredentials)
+                sys.exit(0)
+            
+            # parent process
+            else:
+                connectionSocket.close()
+            
         
-        # Fork for each client connection
-        pid = os.fork()
-        
-        # child process handling
-        if pid == 0:
-            connectionSocket.close() # close the parent's socket in the child process
-            handleClient(connectionSocket, clientPublicKeys, cipherRSA, userCredentials)
-            sys.exit(0)
-        
-        # parent process
-        else:
+        except socket.error as e:
+            print('A socket error has occured:', e)
             connectionSocket.close()
+            serverSocket.close() 
+            sys.exit(1)  
         
-
-    except socket.error as e:
-        print('A socket error has occured:', e)
-        connectionSocket.close()
-        serverSocket.close() 
-        sys.exit(1)  
-      
-    except Exception as e:
-        print('A server error has occured:', e)
-        connectionSocket.close()
-        serverSocket.close() 
-        sys.exit(1)
-
-    finally:
-        if connectionSocket:
+        except Exception as e:
+            print('A server error has occured:', e)
             connectionSocket.close()
+            serverSocket.close() 
+            sys.exit(1)
+        
+        finally:
+            if connectionSocket:
+                connectionSocket.close()
   
 
 #-------
