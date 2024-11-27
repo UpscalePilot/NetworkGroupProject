@@ -1,0 +1,7 @@
+From: client1
+To: client2
+Time and Date: 2024-11-26 18:00:28.950237
+Title: First email
+Content Length: 21
+Content:
+This is a first email

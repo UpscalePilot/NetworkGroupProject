@@ -3,8 +3,8 @@ import sys
 import os
 import json
 import datetime
-from Crypto.PublicKey import RSA
-from Crypto.Cipher import PKCS1_OAEP, AES
+from Crypto.PublicKey import RSA # type: ignore
+from Crypto.Cipher import PKCS1_OAEP, AES # type: ignore
 
 
 def loadKeys():
@@ -55,7 +55,8 @@ def sendEmail(clientSocket, cipherAES, username):
     and sent to the server.
     '''
     encryptedPrompt = clientSocket.recv(1024)
-    cipherAES.decrypt(encryptedPrompt).strip(b'\x00').decode()
+    prompt = cipherAES.decrypt(encryptedPrompt).strip(b'\x00').decode().strip()
+    # print(prompt);
     
     destinations = input("Enter destinations (separated by ;): ")
     title = input("Enter title: ")
@@ -97,12 +98,14 @@ def viewInbox(clientSocket, cipherAES):
     Retrieves and displays the client's inbox list from the server.
     '''
     encryptedInbox = clientSocket.recv(4096)
-    inboxList = cipherAES.decrypt(encryptedInbox).strip(b'\x00').decode()
-    print("Index from DateTime Title")
+    inboxList = cipherAES.decrypt(encryptedInbox).strip(b'\x00').decode().strip()
+    # print("Index from DateTime Title")
+    print(f"{'Index':<6} {'choice':<8} {'DateTime':<26} {'Title':<6}")
     print(inboxList)
+    print("\n");
     
-    encryptedACK = cipherAES.encrypt("OK".encode().ljust(1024))
-    clientSocket.send(encryptedACK)
+    # encryptedACK = cipherAES.encrypt("OK".encode().ljust(1024))
+    # clientSocket.send(encryptedACK)
 
 
 def viewEmail(clientSocket, cipherAES):
@@ -110,16 +113,16 @@ def viewEmail(clientSocket, cipherAES):
     Displays the content of an email from the client's inbox.
     '''
     encryptedRequest = clientSocket.recv(1024)
-    request = cipherAES.decrypt(encryptedRequest).strip(b'\x00').decode()
+    request = cipherAES.decrypt(encryptedRequest).decode().strip()
     
     if request == "the server request email index":
         index = input("Enter the email index you wish to view: ")
         encryptedIndex = cipherAES.encrypt(index.encode().ljust(1024))
         clientSocket.send(encryptedIndex)
         
-        encryptedEmail = clientSocket.recv(4096)
-        email = cipherAES.decrypt(encryptedEmail).strip(b'\x00').decode()
-        print(email)
+        encryptedEmail = clientSocket.recv(1000000)
+        email = cipherAES.decrypt(encryptedEmail).decode().strip()
+        print(email + "\n")
 
 
 def terminalOperationsHandler(clientSocket, cipherAES, username):
@@ -130,7 +133,7 @@ def terminalOperationsHandler(clientSocket, cipherAES, username):
     while True:
         # receive and decrypt the menu message
         encryptedMenu = clientSocket.recv(1024)
-        menu = cipherAES.decrypt(encryptedMenu).strip(b'\x00').decode()
+        menu = cipherAES.decrypt(encryptedMenu).strip(b'\x00').decode().strip()
         print(menu, end='', flush=True)
         
         # get the client's choice and encrypt it
@@ -162,6 +165,10 @@ def client(serverPublicKey):
     # Server Information
     serverName = input("Enter the server IP or name: ")
     serverPort = 13000
+    
+    # default server name set to lab machine 5 - DELETE THIS before handing in
+    if serverName == "":
+        serverName = "cc5-212-14.macewan.ca";
     
     # Create client socket using IPv4 and TCP protocols 
     try:
