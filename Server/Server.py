@@ -129,10 +129,11 @@ def inboxListHandler(connectionSocket, cipherAES, username):
 
 
 def viewEmailHandler(connectionSocket, cipherAES, username):
-    connectionSocket.send(cipherAES.encrypt("the server reqeust email index".encode().ljust(1024)))
+    connectionSocket.send(cipherAES.encrypt("the server request email index".encode().ljust(1024)))
     
     encryptedIndex = connectionSocket.recv(1024)
-    index = int(cipherAES.decrypt(encryptedIndex).strip(b'\x00').decode())
+    index = int(cipherAES.decrypt(encryptedIndex).decode().strip())
+    print(index);
     
     serverDir = os.path.dirname(os.path.abspath(__file__))
     inboxDir = os.path.join(serverDir, username)
@@ -141,7 +142,7 @@ def viewEmailHandler(connectionSocket, cipherAES, username):
     if 1 <= index <= len(emailFiles):
         with open(emailFiles[index-1], 'r') as f:
             emailContent = f.read()
-        connectionSocket.send(cipherAES.encrypt(emailContent.encode().ljust(4096)))
+        connectionSocket.send(cipherAES.encrypt(emailContent.strip().encode().ljust(4096)))
 
 
 def handleClient(connectionSocket, clientPublicKeys, cipherRSA, userCredentials):
@@ -195,7 +196,6 @@ def handleClient(connectionSocket, clientPublicKeys, cipherRSA, userCredentials)
             encryptedChoice = connectionSocket.recv(1024)
             # when decrypting, strip the padding from the message
             choice = cipherAES.decrypt(encryptedChoice).strip(b'\x00').decode().strip()
-            print(username + ": " + choice);
             
             # send email
             if choice == '1':

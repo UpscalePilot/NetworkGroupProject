@@ -113,16 +113,16 @@ def viewEmail(clientSocket, cipherAES):
     Displays the content of an email from the client's inbox.
     '''
     encryptedRequest = clientSocket.recv(1024)
-    request = cipherAES.decrypt(encryptedRequest).strip(b'\x00').decode()
+    request = cipherAES.decrypt(encryptedRequest).decode().strip()
     
     if request == "the server request email index":
         index = input("Enter the email index you wish to view: ")
         encryptedIndex = cipherAES.encrypt(index.encode().ljust(1024))
         clientSocket.send(encryptedIndex)
         
-        encryptedEmail = clientSocket.recv(4096)
-        email = cipherAES.decrypt(encryptedEmail).strip(b'\x00').decode()
-        print(email)
+        encryptedEmail = clientSocket.recv(1000000)
+        email = cipherAES.decrypt(encryptedEmail).decode().strip()
+        print(email + "\n")
 
 
 def terminalOperationsHandler(clientSocket, cipherAES, username):
@@ -168,7 +168,7 @@ def client(serverPublicKey):
     
     # default server name set to lab machine 5 - DELETE THIS before handing in
     if serverName == "":
-        serverName = "cc5-212-05.macewan.ca";
+        serverName = "cc5-212-14.macewan.ca";
     
     # Create client socket using IPv4 and TCP protocols 
     try:
