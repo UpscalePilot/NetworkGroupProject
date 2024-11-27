@@ -1,4 +1,3 @@
 # ignore all key files
 *.pem
-Server/*.pem
-Client/*.pem
+
