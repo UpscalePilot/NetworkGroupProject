@@ -12,6 +12,7 @@ saves a few seconds for pasting the code into each subdirectory when we make cha
         
         # Path to source Client.py
         source_path = os.path.join(base_dir, "Client.py")
+        source_path2 = os.path.join(base_dir, "Client_enhanced.py")
         
         # Verify source exists
         if not os.path.exists(source_path):
@@ -24,6 +25,7 @@ saves a few seconds for pasting the code into each subdirectory when we make cha
         for client_dir in client_dirs:
             dest_dir = os.path.join(base_dir, client_dir)
             dest_path = os.path.join(dest_dir, "Client.py")
+            dest_path2 = os.path.join(dest_dir, "Cleint_enhanced.py")
             
             if not os.path.exists(dest_dir):
                 print(f"Warning: Directory {dest_dir} does not exist, creating it...")
@@ -31,11 +33,18 @@ saves a few seconds for pasting the code into each subdirectory when we make cha
                 
             try:
                 shutil.copy2(source_path, dest_path)
-                print(f"Successfully copied Client.py to {dest_dir}")
+                print(f"Successfully copied Client.py to /{client_dir}")
             except Exception as e:
                 print(f"Error copying to {dest_dir}: {str(e)}")
                 continue
-
+            
+            try:
+                shutil.copy2(source_path2, dest_path2)
+                print(f"Successfully copied Client_enhanced.py to /{client_dir}")
+            except Exception as e:
+                print(f"Error copying to {dest_dir}: {str(e)}")
+                continue
+    
     except Exception as e:
         print(f"An error occurred: {str(e)}")
         sys.exit(1)
