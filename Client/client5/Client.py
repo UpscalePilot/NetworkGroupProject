@@ -56,13 +56,15 @@ def sendEmail(clientSocket, cipherAES, username):
     '''
     encryptedPrompt = clientSocket.recv(1024)
     prompt = cipherAES.decrypt(encryptedPrompt).strip(b'\x00').decode().strip()
-    # print(prompt);
     
     destinations = input("Enter destinations (separated by ;): ")
     title = input("Enter title: ")
     
     if len(title) > 100:
         print("Title is too long (max 100 characters)")
+        # return client to menu, maintain connection protocol by submitting empty contents as an email
+        emptyEmail = f"From: {username}\nTo: \nTitle: \nContent Length: 0\nContents:\n"
+        clientSocket.send(cipherAES.encrypt(emptyEmail.encode().ljust(4096)))
         return
     
     content = ''
@@ -71,8 +73,12 @@ def sendEmail(clientSocket, cipherAES, username):
         try:
             with open(fileName, 'r') as f:
                 content = f.read()
+                
         except FileNotFoundError:
-            print("File not found")
+            print("File not found. Returning to menu.\n")
+            # return client to menu, maintain connection protocol by submitting empty contents as an email
+            emptyEmail = f"From: {username}\nTo: \nTitle: \nContent Length: 0\nContents:\n"
+            clientSocket.send(cipherAES.encrypt(emptyEmail.encode().ljust(4096)))
             return
         
     else:
@@ -80,6 +86,9 @@ def sendEmail(clientSocket, cipherAES, username):
     
     if len(content) > 1000000:
         print("Contents too long (max 1000000 characters)")
+        # return client to menu, maintain connection protocol by submitting empty contents as an email
+        emptyEmail = f"From: {username}\nTo: \nTitle: \nContent Length: 0\nContents:\n"
+        clientSocket.send(cipherAES.encrypt(emptyEmail.encode().ljust(4096)))
         return
     
     email = f"From: {username}\n"
@@ -122,6 +131,12 @@ def viewEmail(clientSocket, cipherAES):
         
         encryptedEmail = clientSocket.recv(4096)
         email = cipherAES.decrypt(encryptedEmail).decode().strip()
+        
+        # check for the invalid index error msg
+        if email.startswith("Error:"):
+            print(email + '\n')
+            return
+        
         print(email + "\n")
 
 
