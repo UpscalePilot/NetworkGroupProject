@@ -1,0 +1,7 @@
+From: client2
+To: client1
+Time and Date: 2024-11-30 16:48:20.061418
+Title: Test
+Content Length: 14
+Content:
+This is a test

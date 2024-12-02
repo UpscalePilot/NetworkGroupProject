@@ -134,7 +134,7 @@ def terminalOperationsHandler(clientSocket, cipherAES, username):
         # receive and decrypt the menu message
         encryptedMenu = clientSocket.recv(1024)
         menu = cipherAES.decrypt(encryptedMenu).strip(b'\x00').decode().strip()
-        print(menu, end='', flush=True)
+        print(menu, end=' ', flush=True)
         
         # get the client's choice and encrypt it
         choice = input()
@@ -180,19 +180,18 @@ def client(serverPublicKey):
         # get the client's username/password
         clientUsername = input("Enter your username: ")
         clientPassword = input("Enter your password: ")
-
-        # load the client's private key
-        clientPrivateKey = loadPrivateKey(clientUsername)
-
+        
         # encrypt client credentials and send them to the server
         creds = f"{clientUsername}:{clientPassword}"
         cipherRSA = PKCS1_OAEP.new(serverPublicKey)
         encryptedCredentials = cipherRSA.encrypt(creds.encode())
         clientSocket.send(encryptedCredentials)
         
-        
         # receive the server response
         response = clientSocket.recv(1024)
+        
+        # load the client's private key
+        clientPrivateKey = loadPrivateKey(clientUsername)
         
         try:
             # try to decrypt as sym_key
