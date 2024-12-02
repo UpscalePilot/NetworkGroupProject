@@ -143,30 +143,33 @@ def viewEmail(clientSocket, cipherAES):
 def terminalOperationsHandler(clientSocket, cipherAES, username):
     '''
     The main loop for the terminal client and handling user choices
-    for sending emails, checking their emails, and termination of the connection. 
+    for sending emails, checking their emails, and termination of the connection.
     '''
+    valid_choices = {'1', '2', '3', '4'}  # Define the only selectable options. Error handling
+
     while True:
-        # receive and decrypt the menu message
+        # Receive and decrypt the menu message
         encryptedMenu = clientSocket.recv(1024)
         menu = cipherAES.decrypt(encryptedMenu).strip(b'\x00').decode().strip()
         print(menu, end=' ', flush=True)
-        
-        # get the client's choice and encrypt it
-        choice = input()
+
+        # Loop until a valid choice is entered
+        while True:
+            choice = input()
+            if choice in valid_choices:
+                break  # Exit the loop if the choice is valid
+            print("\nInvalid choice\n" + menu, end=' ', flush=True)
+
+        # Encrypt and send the valid choice
         encryptedChoice = cipherAES.encrypt(choice.encode().ljust(1024))
         clientSocket.send(encryptedChoice)
-        
-        
+
         if choice == '1':
             sendEmail(clientSocket, cipherAES, username)
-        
         elif choice == '2':
             viewInbox(clientSocket, cipherAES)
-        
         elif choice == '3':
             viewEmail(clientSocket, cipherAES)
-        
-        # termination selection. Unsure if error checking for menu choices is required
         elif choice == '4':
             print("The connection is terminated with the server.")
             break
