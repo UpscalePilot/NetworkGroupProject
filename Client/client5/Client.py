@@ -66,7 +66,7 @@ def sendEmail(clientSocket, cipherAES, username):
         return
     
     content = ''
-    if input("Would youlike to load contents from a file?(Y/N) ").upper() == 'Y':
+    if input("Would you like to load contents from a file?(Y/N) ").upper() == 'Y':
         fileName = input("Enter filename: ")
         try:
             with open(fileName, 'r') as f:
@@ -79,14 +79,14 @@ def sendEmail(clientSocket, cipherAES, username):
         content = input("Enter message contents: ")
     
     if len(content) > 1000000:
-        print("Content too long (max 1000000 characters)")
+        print("Contents too long (max 1000000 characters)")
         return
     
     email = f"From: {username}\n"
     email += f"To: {destinations}\n"
     email += f"Title: {title}\n"
     email += f"Content Length: {len(content)}\n"
-    email += f"Content:\n{content}"
+    email += f"Contents:\n{content}"
     
     encryptedEmail = cipherAES.encrypt(email.encode().ljust(4096))
     clientSocket.send(encryptedEmail)
@@ -120,7 +120,7 @@ def viewEmail(clientSocket, cipherAES):
         encryptedIndex = cipherAES.encrypt(index.encode().ljust(1024))
         clientSocket.send(encryptedIndex)
         
-        encryptedEmail = clientSocket.recv(1024)
+        encryptedEmail = clientSocket.recv(4096)
         email = cipherAES.decrypt(encryptedEmail).decode().strip()
         print(email + "\n")
 
