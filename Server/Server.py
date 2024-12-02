@@ -141,7 +141,7 @@ def viewEmailHandler(connectionSocket, cipherAES, username):
     if 1 <= index <= len(emailFiles):
         with open(emailFiles[index-1], 'r') as f:
             emailContent = f.read()
-        connectionSocket.send(cipherAES.encrypt(emailContent.strip().encode().ljust(4096)))
+        connectionSocket.send(cipherAES.encrypt(emailContent.strip().encode().ljust(1024)))
 
 
 def handleClient(connectionSocket, clientPublicKeys, cipherRSA, userCredentials):

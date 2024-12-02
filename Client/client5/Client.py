@@ -120,7 +120,7 @@ def viewEmail(clientSocket, cipherAES):
         encryptedIndex = cipherAES.encrypt(index.encode().ljust(1024))
         clientSocket.send(encryptedIndex)
         
-        encryptedEmail = clientSocket.recv(1000000)
+        encryptedEmail = clientSocket.recv(1024)
         email = cipherAES.decrypt(encryptedEmail).decode().strip()
         print(email + "\n")
 
