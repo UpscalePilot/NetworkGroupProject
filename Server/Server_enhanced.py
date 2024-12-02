@@ -8,7 +8,26 @@ from Crypto.PublicKey import RSA # type: ignore
 from Crypto.Cipher import PKCS1_OAEP, AES # type: ignore
 from Crypto.Random import get_random_bytes # type: ignore
 
+# Track the session for replay protection
+# Store used nones, active client sessions with timestamps
+activeSessions = {'nonces': set(), 'sessions': {}}
 
+def generateChallenge():
+    '''
+    Generate a unique nonce (Number used ONCE) and timestamp for client authentication.
+    This prevents replay attacks by ensuring authentication attempts are unique.
+    '''
+    nonce = get_random_bytes(16).hex()
+    timestamp = datetime.datetime.now().timestamp()
+    return nonce, timestamp
+
+def validateTimestamp(timestamp, maxAge=30):
+    '''
+    Verifies the client's response to be within an acceptable time window
+    and prevent replay attacks using the old captured messages.
+    '''
+    currTime = datetime.datetime.now().timestamp()
+    return abs(currTime - float(timestamp)) <= maxAge
 
 def loadUserCredentials():
     """
@@ -138,19 +157,50 @@ def viewEmailHandler(connectionSocket, cipherAES, username):
     inboxDir = os.path.join(serverDir, username)
     emailFiles = sorted(glob.glob(os.path.join(inboxDir, "*.txt")), key=os.path.getmtime)
     
-    if 1 <= index <= len(emailFiles):
-        with open(emailFiles[index-1], 'r') as f:
-            emailContent = f.read()
-        connectionSocket.send(cipherAES.encrypt(emailContent.strip().encode().ljust(4096)))
+    # invalid index selection
+    if not (1 <= index <= len(emailFiles)):
+        errorMsg = 'Error: Selected email index does not exist.'
+        connectionSocket.send(cipherAES.encrypt(errorMsg.encode().ljust(4096)))
+        return
+    
+    # open the email, send it to the client.
+    with open(emailFiles[index-1], 'r') as f:
+        emailContent = f.read()
+    connectionSocket.send(cipherAES.encrypt(emailContent.strip().encode().ljust(4096)))
 
 
 def handleClient(connectionSocket, clientPublicKeys, cipherRSA, userCredentials):
     """Individual clients are handled in this function."""
     try:
+        nonce, authTimestamp = generateChallenge()
+        challenge = f"{nonce}:{authTimestamp}"
+        connectionSocket.send(challenge.encode())
+        print(f"[Security] Generated authentication challenge")
+        
+        
         # receive the encrypted client's credentials
         encryptedCreds = connectionSocket.recv(1024)
         decryptedCreds = cipherRSA.decrypt(encryptedCreds)
-        username, password = decryptedCreds.decode().split(":")
+        username, password, clientNonce, clientTimestamp = decryptedCreds.decode().split(":")
+        
+        if clientNonce in activeSessions['nonces']:
+            print(f"[Security Alert] Replay attack detected - Reused nonce from {username}")
+            connectionSocket.send("Security Error: Authentication failed".encode())
+            return
+        
+        if not validateTimestamp(clientTimestamp):
+            print(f"[Security Alert] Potential replay attack - Expired timestamp from {username}")
+            connectionSocket.send("Security Error: Time validation failed".encode())
+            return
+        
+        if clientNonce != nonce:
+            print(f"[Security Alert] Invalid challenge response from {username}")
+            connectionSocket.send("Security Error: Challenge failed".encode())
+            return
+        
+        # store the used nonce
+        activeSessions['nonces'].add(clientNonce)
+        
         
         # verify the client's credentials
         if not verifyClientCredentials(username, password, userCredentials):
@@ -159,12 +209,21 @@ def handleClient(connectionSocket, clientPublicKeys, cipherRSA, userCredentials)
             print(f"The received client information: {username} is invalid (Connection Terminated).")
             return
         
-        # generate and send the sym_key (symmetric key)
+        # generate session info
+        sessionID = get_random_bytes(16).hex()
         sym_key = get_random_bytes(32) # 256-bit key, AES encryption
+        activeSessions['sessions'][username] = {
+            'sessionID': sessionID,
+            'timestamp': datetime.datetime.now().timestamp()
+        }
+        
+        # send the encrypted session key with the sessionID
         clientPublicKey = clientPublicKeys[username]
         cipherRSAClient = PKCS1_OAEP.new(clientPublicKey)
-        encrypedSymKey = cipherRSAClient.encrypt(sym_key)
+        sessionData = f'{sessionID}:{sym_key.hex()}'
+        encrypedSymKey = cipherRSAClient.encrypt(sessionData.encode())
         connectionSocket.send(encrypedSymKey)
+        print(f"[Security] Secure session established for {username}")
         
         print(f"Connection Accepted and Symmetric key generated for client: {username}")
         
@@ -221,6 +280,23 @@ def handleClient(connectionSocket, clientPublicKeys, cipherRSA, userCredentials)
         connectionSocket.close()
 
 
+def cleanupSessions():
+    '''
+    Removes all expired sessions and old nonces to prevent excessive memory growth
+    '''
+    currTime = datetime.datetime.now().timestamp()
+    expired = []
+    for username, session in activeSessions['sessions'].items():
+        if currTime - session['timestamp'] > 3600:
+            expired.append(username)
+            
+    for username in expired:
+        del activeSessions['sessions'][username]
+        
+    # clear old nonces periodically
+    if len(activeSessions['nonces']) > 1000:
+        activeSessions['nonces'].clear()
+
 def server(cipherRSA, clientPublicKeys, userCredentials):
     # Create server socket that uses IPv4 and TCP protocols 
     serverPort = 13000
@@ -251,6 +327,7 @@ def server(cipherRSA, clientPublicKeys, userCredentials):
     while True:
         try:
             #Server accepts client connection
+            cleanupSessions()
             connectionSocket, addr = serverSocket.accept()
             
             # Fork for each client connection
@@ -258,7 +335,7 @@ def server(cipherRSA, clientPublicKeys, userCredentials):
             
             # child process handling
             if pid == 0:
-                serverSocket.close()        # close the parent's socket in the child process
+                serverSocket.close()   # close the parent's socket in the child process
                 handleClient(connectionSocket, clientPublicKeys, cipherRSA, userCredentials)
                 sys.exit(0)
             

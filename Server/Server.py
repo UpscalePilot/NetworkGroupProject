@@ -138,10 +138,16 @@ def viewEmailHandler(connectionSocket, cipherAES, username):
     inboxDir = os.path.join(serverDir, username)
     emailFiles = sorted(glob.glob(os.path.join(inboxDir, "*.txt")), key=os.path.getmtime)
     
-    if 1 <= index <= len(emailFiles):
-        with open(emailFiles[index-1], 'r') as f:
-            emailContent = f.read()
-        connectionSocket.send(cipherAES.encrypt(emailContent.strip().encode().ljust(4096)))
+    # invalid index selection
+    if not (1 <= index <= len(emailFiles)):
+        errorMsg = 'Error: Selected email index does not exist.'
+        connectionSocket.send(cipherAES.encrypt(errorMsg.encode().ljust(4096)))
+        return
+    
+    # open the email, send it to the client.
+    with open(emailFiles[index-1], 'r') as f:
+        emailContent = f.read()
+    connectionSocket.send(cipherAES.encrypt(emailContent.strip().encode().ljust(4096)))
 
 
 def handleClient(connectionSocket, clientPublicKeys, cipherRSA, userCredentials):

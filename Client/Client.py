@@ -56,37 +56,46 @@ def sendEmail(clientSocket, cipherAES, username):
     '''
     encryptedPrompt = clientSocket.recv(1024)
     prompt = cipherAES.decrypt(encryptedPrompt).strip(b'\x00').decode().strip()
-    # print(prompt);
     
     destinations = input("Enter destinations (separated by ;): ")
     title = input("Enter title: ")
     
     if len(title) > 100:
         print("Title is too long (max 100 characters)")
+        # return client to menu, maintain connection protocol by submitting empty contents as an email
+        emptyEmail = f"From: {username}\nTo: \nTitle: \nContent Length: 0\nContents:\n"
+        clientSocket.send(cipherAES.encrypt(emptyEmail.encode().ljust(4096)))
         return
     
     content = ''
-    if input("Would youlike to load contents from a file?(Y/N) ").upper() == 'Y':
+    if input("Would you like to load contents from a file?(Y/N) ").upper() == 'Y':
         fileName = input("Enter filename: ")
         try:
             with open(fileName, 'r') as f:
                 content = f.read()
+                
         except FileNotFoundError:
-            print("File not found")
+            print("File not found. Returning to menu.\n")
+            # return client to menu, maintain connection protocol by submitting empty contents as an email
+            emptyEmail = f"From: {username}\nTo: \nTitle: \nContent Length: 0\nContents:\n"
+            clientSocket.send(cipherAES.encrypt(emptyEmail.encode().ljust(4096)))
             return
         
     else:
         content = input("Enter message contents: ")
     
     if len(content) > 1000000:
-        print("Content too long (max 1000000 characters)")
+        print("Contents too long (max 1000000 characters)")
+        # return client to menu, maintain connection protocol by submitting empty contents as an email
+        emptyEmail = f"From: {username}\nTo: \nTitle: \nContent Length: 0\nContents:\n"
+        clientSocket.send(cipherAES.encrypt(emptyEmail.encode().ljust(4096)))
         return
     
     email = f"From: {username}\n"
     email += f"To: {destinations}\n"
     email += f"Title: {title}\n"
     email += f"Content Length: {len(content)}\n"
-    email += f"Content:\n{content}"
+    email += f"Contents:\n{content}"
     
     encryptedEmail = cipherAES.encrypt(email.encode().ljust(4096))
     clientSocket.send(encryptedEmail)
@@ -120,38 +129,47 @@ def viewEmail(clientSocket, cipherAES):
         encryptedIndex = cipherAES.encrypt(index.encode().ljust(1024))
         clientSocket.send(encryptedIndex)
         
-        encryptedEmail = clientSocket.recv(1000000)
+        encryptedEmail = clientSocket.recv(4096)
         email = cipherAES.decrypt(encryptedEmail).decode().strip()
+        
+        # check for the invalid index error msg
+        if email.startswith("Error:"):
+            print(email + '\n')
+            return
+        
         print(email + "\n")
 
 
 def terminalOperationsHandler(clientSocket, cipherAES, username):
     '''
     The main loop for the terminal client and handling user choices
-    for sending emails, checking their emails, and termination of the connection. 
+    for sending emails, checking their emails, and termination of the connection.
     '''
+    valid_choices = {'1', '2', '3', '4'}  # Define the only selectable options. Error handling
+
     while True:
-        # receive and decrypt the menu message
+        # Receive and decrypt the menu message
         encryptedMenu = clientSocket.recv(1024)
         menu = cipherAES.decrypt(encryptedMenu).strip(b'\x00').decode().strip()
         print(menu, end=' ', flush=True)
-        
-        # get the client's choice and encrypt it
-        choice = input()
+
+        # Loop until a valid choice is entered
+        while True:
+            choice = input()
+            if choice in valid_choices:
+                break  # Exit the loop if the choice is valid
+            print("\nInvalid choice\n" + menu, end=' ', flush=True)
+
+        # Encrypt and send the valid choice
         encryptedChoice = cipherAES.encrypt(choice.encode().ljust(1024))
         clientSocket.send(encryptedChoice)
-        
-        
+
         if choice == '1':
             sendEmail(clientSocket, cipherAES, username)
-        
         elif choice == '2':
             viewInbox(clientSocket, cipherAES)
-        
         elif choice == '3':
             viewEmail(clientSocket, cipherAES)
-        
-        # termination selection. Unsure if error checking for menu choices is required
         elif choice == '4':
             print("The connection is terminated with the server.")
             break
