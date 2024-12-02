@@ -133,7 +133,6 @@ def viewEmailHandler(connectionSocket, cipherAES, username):
     
     encryptedIndex = connectionSocket.recv(1024)
     index = int(cipherAES.decrypt(encryptedIndex).decode().strip())
-    print(index);
     
     serverDir = os.path.dirname(os.path.abspath(__file__))
     inboxDir = os.path.join(serverDir, username)
@@ -156,7 +155,8 @@ def handleClient(connectionSocket, clientPublicKeys, cipherRSA, userCredentials)
         # verify the client's credentials
         if not verifyClientCredentials(username, password, userCredentials):
             connectionSocket.send("Invalid username or password".encode())
-            print(f"The received client info: {username} is invalid (Connection Terminated).")
+            connectionSocket.close()
+            print(f"The received client information: {username} is invalid (Connection Terminated).")
             return
         
         # generate and send the sym_key (symmetric key)
