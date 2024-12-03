@@ -1,7 +1,0 @@
-From: client3
-To: client5
-Time and Date: 2024-12-01 19:28:51.675424
-Title: This is a Test Email
-Content Length: 25
-Content:
-This is a testing email.

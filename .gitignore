@@ -1,3 +1,4 @@
 # ignore all key files
 *.pem
 
+Server/client?/*.txt

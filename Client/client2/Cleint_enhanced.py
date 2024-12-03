@@ -56,37 +56,46 @@ def sendEmail(clientSocket, cipherAES, username):
     '''
     encryptedPrompt = clientSocket.recv(1024)
     prompt = cipherAES.decrypt(encryptedPrompt).strip(b'\x00').decode().strip()
-    # print(prompt);
     
     destinations = input("Enter destinations (separated by ;): ")
     title = input("Enter title: ")
     
     if len(title) > 100:
         print("Title is too long (max 100 characters)")
+        # return client to menu, maintain connection protocol by submitting empty contents as an email
+        emptyEmail = f"From: {username}\nTo: \nTitle: \nContent Length: 0\nContents:\n"
+        clientSocket.send(cipherAES.encrypt(emptyEmail.encode().ljust(4096)))
         return
     
     content = ''
-    if input("Would youlike to load contents from a file?(Y/N) ").upper() == 'Y':
+    if input("Would you like to load contents from a file?(Y/N) ").upper() == 'Y':
         fileName = input("Enter filename: ")
         try:
             with open(fileName, 'r') as f:
                 content = f.read()
+                
         except FileNotFoundError:
-            print("File not found")
+            print("File not found. Returning to menu.\n")
+            # return client to menu, maintain connection protocol by submitting empty contents as an email
+            emptyEmail = f"From: {username}\nTo: \nTitle: \nContent Length: 0\nContents:\n"
+            clientSocket.send(cipherAES.encrypt(emptyEmail.encode().ljust(4096)))
             return
         
     else:
         content = input("Enter message contents: ")
     
     if len(content) > 1000000:
-        print("Content too long (max 1000000 characters)")
+        print("Contents too long (max 1000000 characters)")
+        # return client to menu, maintain connection protocol by submitting empty contents as an email
+        emptyEmail = f"From: {username}\nTo: \nTitle: \nContent Length: 0\nContents:\n"
+        clientSocket.send(cipherAES.encrypt(emptyEmail.encode().ljust(4096)))
         return
     
     email = f"From: {username}\n"
     email += f"To: {destinations}\n"
     email += f"Title: {title}\n"
     email += f"Content Length: {len(content)}\n"
-    email += f"Content:\n{content}"
+    email += f"Contents:\n{content}"
     
     encryptedEmail = cipherAES.encrypt(email.encode().ljust(4096))
     clientSocket.send(encryptedEmail)
@@ -120,8 +129,14 @@ def viewEmail(clientSocket, cipherAES):
         encryptedIndex = cipherAES.encrypt(index.encode().ljust(1024))
         clientSocket.send(encryptedIndex)
         
-        encryptedEmail = clientSocket.recv(1000000)
+        encryptedEmail = clientSocket.recv(4096)
         email = cipherAES.decrypt(encryptedEmail).decode().strip()
+        
+        # check for the invalid index error msg
+        if email.startswith("Error:"):
+            print(email + '\n')
+            return
+        
         print(email + "\n")
 
 
@@ -176,16 +191,29 @@ def client(serverPublicKey):
         # if the client hangs, timeout the connection after 10 seconds.
         clientSocket.settimeout(10)
         clientSocket.connect((serverName, serverPort))
+        print("[Security] Connected to srever, awaiting challenge")
+        
+        challenge = clientSocket.recv(1024).decode()
+        serverNonce, serverTimestamp = challenge.split(':')
+        print("[Security] Receieved server challenge")
 
         # get the client's username/password
         clientUsername = input("Enter your username: ")
         clientPassword = input("Enter your password: ")
         
         # encrypt client credentials and send them to the server
-        creds = f"{clientUsername}:{clientPassword}"
+        currTimestamp = datetime.datetime.now().timestamp()
+        creds = f"{clientUsername}:{clientPassword}:{serverNonce}:{currTimestamp}"
         cipherRSA = PKCS1_OAEP.new(serverPublicKey)
         encryptedCredentials = cipherRSA.encrypt(creds.encode())
+        
+        # for testing purposes: save the encrypted credentials
+        print("[Test] Saving encrypted credentials to capturedAuth.txt")
+        with open('capturedAuth.txt', 'wb') as f:
+            f.write(encryptedCredentials)
+        
         clientSocket.send(encryptedCredentials)
+        print("[Security] Sent authenticated credentials")
         
         # receive the server response
         response = clientSocket.recv(1024)
@@ -196,7 +224,11 @@ def client(serverPublicKey):
         try:
             # try to decrypt as sym_key
             cipherRSA = PKCS1_OAEP.new(clientPrivateKey)
-            sym_key = cipherRSA.decrypt(response)
+            decryptedData = cipherRSA.decrypt(response).decode()
+            sym_key = cipherRSA.decrypt(response).decode()
+            sessionID, sym_keyHex = decryptedData.split(":")
+            sym_key = bytes.fromhex(sym_keyHex)
+            print('[Security] Established secure session')
             
         
             # send the acknowledgement to the server

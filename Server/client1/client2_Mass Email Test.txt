@@ -1,7 +1,0 @@
-From: client2
-To: client1;client2;client3;client4;client5
-Time and Date: 2024-11-26 20:45:02.421764
-Title: Mass Email Test
-Content Length: 61
-Content:
-This email is a test for sending an email to multiple clients

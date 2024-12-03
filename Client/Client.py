@@ -5,6 +5,7 @@ import json
 import datetime
 from Crypto.PublicKey import RSA # type: ignore
 from Crypto.Cipher import PKCS1_OAEP, AES # type: ignore
+from Crypto.Util.Padding import pad, unpad # type: ignore
 
 
 def loadKeys():
@@ -55,7 +56,7 @@ def sendEmail(clientSocket, cipherAES, username):
     and sent to the server.
     '''
     encryptedPrompt = clientSocket.recv(1024)
-    prompt = cipherAES.decrypt(encryptedPrompt).strip(b'\x00').decode().strip()
+    prompt = cipherAES.decrypt(encryptedPrompt).decode().strip()
     
     destinations = input("Enter destinations (separated by ;): ")
     title = input("Enter title: ")
@@ -64,7 +65,7 @@ def sendEmail(clientSocket, cipherAES, username):
         print("Title is too long (max 100 characters)")
         # return client to menu, maintain connection protocol by submitting empty contents as an email
         emptyEmail = f"From: {username}\nTo: \nTitle: \nContent Length: 0\nContents:\n"
-        clientSocket.send(cipherAES.encrypt(emptyEmail.encode().ljust(4096)))
+        clientSocket.send(cipherAES.encrypt(emptyEmail.encode('ascii').ljust(4096)))
         return
     
     content = ''
@@ -78,7 +79,7 @@ def sendEmail(clientSocket, cipherAES, username):
             print("File not found. Returning to menu.\n")
             # return client to menu, maintain connection protocol by submitting empty contents as an email
             emptyEmail = f"From: {username}\nTo: \nTitle: \nContent Length: 0\nContents:\n"
-            clientSocket.send(cipherAES.encrypt(emptyEmail.encode().ljust(4096)))
+            clientSocket.send(cipherAES.encrypt(emptyEmail.encode('ascii').ljust(4096)))
             return
         
     else:
@@ -88,17 +89,20 @@ def sendEmail(clientSocket, cipherAES, username):
         print("Contents too long (max 1000000 characters)")
         # return client to menu, maintain connection protocol by submitting empty contents as an email
         emptyEmail = f"From: {username}\nTo: \nTitle: \nContent Length: 0\nContents:\n"
-        clientSocket.send(cipherAES.encrypt(emptyEmail.encode().ljust(4096)))
+        clientSocket.send(cipherAES.encrypt(emptyEmail.encode('ascii').ljust(4096)))
         return
     
-    email = f"From: {username}\n"
-    email += f"To: {destinations}\n"
-    email += f"Title: {title}\n"
-    email += f"Content Length: {len(content)}\n"
-    email += f"Contents:\n{content}"
+    emailHeader = f"From: {username}\n"
+    emailHeader += f"To: {destinations}\n"
+    emailHeader += f"Title: {title}\n"
+    emailHeader += f"Content Length: {len(content)}\n"
+    # email += f"Contents:\n{content}"
+    emailHeader += f"Contents:\n"
     
-    encryptedEmail = cipherAES.encrypt(email.encode().ljust(4096))
-    clientSocket.send(encryptedEmail)
+    encryptedEmailHeader = cipherAES.encrypt(emailHeader.encode('ascii').ljust(4096))
+    clientSocket.send(encryptedEmailHeader)
+    encryptedEmailContnet = cipherAES.encrypt(pad(content.encode('ascii'), 32))
+    clientSocket.send(encryptedEmailContnet)
     print("The message is sent to the server.")
 
 
@@ -107,7 +111,7 @@ def viewInbox(clientSocket, cipherAES):
     Retrieves and displays the client's inbox list from the server.
     '''
     encryptedInbox = clientSocket.recv(4096)
-    inboxList = cipherAES.decrypt(encryptedInbox).strip(b'\x00').decode().strip()
+    inboxList = cipherAES.decrypt(encryptedInbox).decode('ascii').strip()
     # print("Index from DateTime Title")
     print(f"{'Index':<6} {'choice':<8} {'DateTime':<26} {'Title':<6}")
     print(inboxList)
@@ -122,15 +126,15 @@ def viewEmail(clientSocket, cipherAES):
     Displays the content of an email from the client's inbox.
     '''
     encryptedRequest = clientSocket.recv(1024)
-    request = cipherAES.decrypt(encryptedRequest).decode().strip()
+    request = cipherAES.decrypt(encryptedRequest).decode('ascii').strip()
     
     if request == "the server request email index":
         index = input("Enter the email index you wish to view: ")
-        encryptedIndex = cipherAES.encrypt(index.encode().ljust(1024))
+        encryptedIndex = cipherAES.encrypt(index.encode('ascii').ljust(1024))
         clientSocket.send(encryptedIndex)
         
         encryptedEmail = clientSocket.recv(4096)
-        email = cipherAES.decrypt(encryptedEmail).decode().strip()
+        email = cipherAES.decrypt(encryptedEmail).decode('ascii').strip()
         
         # check for the invalid index error msg
         if email.startswith("Error:"):
@@ -150,7 +154,7 @@ def terminalOperationsHandler(clientSocket, cipherAES, username):
     while True:
         # Receive and decrypt the menu message
         encryptedMenu = clientSocket.recv(1024)
-        menu = cipherAES.decrypt(encryptedMenu).strip(b'\x00').decode().strip()
+        menu = cipherAES.decrypt(encryptedMenu).decode('ascii').strip()
         print(menu, end=' ', flush=True)
 
         # Loop until a valid choice is entered
@@ -161,7 +165,7 @@ def terminalOperationsHandler(clientSocket, cipherAES, username):
             print("\nInvalid choice\n" + menu, end=' ', flush=True)
 
         # Encrypt and send the valid choice
-        encryptedChoice = cipherAES.encrypt(choice.encode().ljust(1024))
+        encryptedChoice = cipherAES.encrypt(choice.encode('ascii').ljust(1024))
         clientSocket.send(encryptedChoice)
 
         if choice == '1':
@@ -202,7 +206,7 @@ def client(serverPublicKey):
         # encrypt client credentials and send them to the server
         creds = f"{clientUsername}:{clientPassword}"
         cipherRSA = PKCS1_OAEP.new(serverPublicKey)
-        encryptedCredentials = cipherRSA.encrypt(creds.encode())
+        encryptedCredentials = cipherRSA.encrypt(creds.encode('ascii'))
         clientSocket.send(encryptedCredentials)
         
         # receive the server response
@@ -219,14 +223,14 @@ def client(serverPublicKey):
         
             # send the acknowledgement to the server
             cipherAES = AES.new(sym_key, AES.MODE_ECB)
-            encryptedAck = cipherAES.encrypt("OK".encode().ljust(1024))
+            encryptedAck = cipherAES.encrypt("OK".encode('ascii').ljust(1024))
             clientSocket.send(encryptedAck)
 
             terminalOperationsHandler(clientSocket, cipherAES, clientUsername)
             return True
         
         except:
-            print(response.decode())
+            print(response.decode('ascii'))
             print("Terminating.")
             return False
         

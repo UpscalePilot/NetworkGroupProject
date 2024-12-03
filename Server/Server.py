@@ -4,9 +4,10 @@ import os
 import json
 import datetime
 import glob
-from Crypto.PublicKey import RSA # type: ignore
-from Crypto.Cipher import PKCS1_OAEP, AES # type: ignore
-from Crypto.Random import get_random_bytes # type: ignore
+from Crypto.PublicKey import RSA                # type: ignore
+from Crypto.Cipher import PKCS1_OAEP, AES       # type: ignore
+from Crypto.Random import get_random_bytes      # type: ignore
+from Crypto.Util.Padding import pad, unpad      # type: ignore
 
 
 
@@ -75,17 +76,20 @@ def sendEmailHandler(connectionSocket, cipherAES, sender):
     '''
     Recieves an email from the client, decrypts it and saves it to the recipients' inbox directory.
     '''
-    connectionSocket.send(cipherAES.encrypt("Send the email".encode().ljust(1024)))
+    connectionSocket.send(cipherAES.encrypt("Send the email".encode('ascii').ljust(1024)))
     
     # receive an email from the client and decrypt it
-    encryptedEmail = connectionSocket.recv(1000000)
-    emailContent = cipherAES.decrypt(encryptedEmail).strip(b'\x00').decode().strip()
+    encryptedEmail = connectionSocket.recv(4096)
+    emailHeaderContent = cipherAES.decrypt(encryptedEmail).decode('ascii').strip()
     
     # parse the content of the email so we can print it to the terminal
-    lines = emailContent.split('\n')
+    lines = emailHeaderContent.split('\n')
     destinations = lines[1].split(': ')[1].split(';')
     title = lines[2].split(': ')[1]
     contentLen = int(lines[3].split(': ')[1])
+    
+    encryptedEmailContent = connectionSocket.recv(contentLen + (contentLen % 32))
+    emailContent = unpad(cipherAES.decrypt(encryptedEmailContent), 32).decode('ascii')
     
     # add a time stamp to the email
     timestamp = datetime.datetime.now()
@@ -103,7 +107,8 @@ def sendEmailHandler(connectionSocket, cipherAES, sender):
             f.write(f"From: {sender}\n")
             f.write(f"To: {';'.join(destinations)}\n")
             f.write(f"Time and Date: {timestamp}\n")
-            f.write(emailContent[emailContent.index("Title:"):])
+            f.write(emailHeaderContent[emailHeaderContent.index("Title:"):])
+            f.write(emailContent)
     
     print(f"An email from {sender} is sent to {';'.join(destinations)} has a content length of {contentLen}")
 
@@ -125,14 +130,14 @@ def inboxListHandler(connectionSocket, cipherAES, username):
             emails.append(f"{len(emails)+1:<6} {sender:<8} {timestamp:<26} {title:<6}")
     
     inboxList = '\n'.join(emails)
-    connectionSocket.send(cipherAES.encrypt(inboxList.encode().ljust(4096)))
+    connectionSocket.send(cipherAES.encrypt(inboxList.encode('ascii').ljust(4096)))
 
 
 def viewEmailHandler(connectionSocket, cipherAES, username):
-    connectionSocket.send(cipherAES.encrypt("the server request email index".encode().ljust(1024)))
+    connectionSocket.send(cipherAES.encrypt("the server request email index".encode('ascii').ljust(1024)))
     
     encryptedIndex = connectionSocket.recv(1024)
-    index = int(cipherAES.decrypt(encryptedIndex).decode().strip())
+    index = int(cipherAES.decrypt(encryptedIndex).decode('ascii').strip())
     
     serverDir = os.path.dirname(os.path.abspath(__file__))
     inboxDir = os.path.join(serverDir, username)
@@ -141,13 +146,13 @@ def viewEmailHandler(connectionSocket, cipherAES, username):
     # invalid index selection
     if not (1 <= index <= len(emailFiles)):
         errorMsg = 'Error: Selected email index does not exist.'
-        connectionSocket.send(cipherAES.encrypt(errorMsg.encode().ljust(4096)))
+        connectionSocket.send(cipherAES.encrypt(errorMsg.encode('ascii').ljust(4096)))
         return
     
     # open the email, send it to the client.
     with open(emailFiles[index-1], 'r') as f:
         emailContent = f.read()
-    connectionSocket.send(cipherAES.encrypt(emailContent.strip().encode().ljust(4096)))
+    connectionSocket.send(cipherAES.encrypt(emailContent.strip().encode('ascii').ljust(4096)))
 
 
 def handleClient(connectionSocket, clientPublicKeys, cipherRSA, userCredentials):
@@ -156,11 +161,11 @@ def handleClient(connectionSocket, clientPublicKeys, cipherRSA, userCredentials)
         # receive the encrypted client's credentials
         encryptedCreds = connectionSocket.recv(1024)
         decryptedCreds = cipherRSA.decrypt(encryptedCreds)
-        username, password = decryptedCreds.decode().split(":")
+        username, password = decryptedCreds.decode('ascii').split(":")
         
         # verify the client's credentials
         if not verifyClientCredentials(username, password, userCredentials):
-            connectionSocket.send("Invalid username or password".encode())
+            connectionSocket.send("Invalid username or password".encode('ascii'))
             connectionSocket.close()
             print(f"The received client information: {username} is invalid (Connection Terminated).")
             return
@@ -180,7 +185,7 @@ def handleClient(connectionSocket, clientPublicKeys, cipherRSA, userCredentials)
         
         # receive acknowledgement from the client
         encryptedAck = connectionSocket.recv(1024)
-        decryptedAck = cipherAES.decrypt(encryptedAck).strip(b'\x00').decode().strip()
+        decryptedAck = cipherAES.decrypt(encryptedAck).decode('ascii').strip()
         
         if decryptedAck != 'OK':
             return
@@ -195,13 +200,13 @@ def handleClient(connectionSocket, clientPublicKeys, cipherRSA, userCredentials)
             # side of the menu string.
             # the reasoning is that AES encryption operates on fixed block sizes
             # so we should maintain consistency with the menu when sending/displaying it.
-            encryptedMenu = cipherAES.encrypt(menu.encode().ljust(1024))
+            encryptedMenu = cipherAES.encrypt(menu.encode('ascii').ljust(1024))
             connectionSocket.send(encryptedMenu)
             
             # get the choice from the client
             encryptedChoice = connectionSocket.recv(1024)
             # when decrypting, strip the padding from the message
-            choice = cipherAES.decrypt(encryptedChoice).strip(b'\x00').decode().strip()
+            choice = cipherAES.decrypt(encryptedChoice).decode('ascii').strip()
             
             # send email
             if choice == '1':
