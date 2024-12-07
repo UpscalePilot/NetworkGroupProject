@@ -76,11 +76,12 @@ def sendEmailHandler(connectionSocket, cipherAES, sender):
     '''
     Recieves an email from the client, decrypts it and saves it to the recipients' inbox directory.
     '''
-    connectionSocket.send(cipherAES.encrypt("Send the email".encode('ascii').ljust(1024)))
+    connectionSocket.send(cipherAES.encrypt("Send the email".ljust(1024).encode('ascii')))
     
     # receive an email from the client and decrypt it
     encryptedEmail = connectionSocket.recv(4096)
     emailHeaderContent = cipherAES.decrypt(encryptedEmail).decode('ascii').strip()
+    
     
     # parse the content of the email so we can print it to the terminal
     lines = emailHeaderContent.split('\n')
@@ -88,8 +89,9 @@ def sendEmailHandler(connectionSocket, cipherAES, sender):
     title = lines[2].split(': ')[1]
     contentLen = int(lines[3].split(': ')[1])
     
-    encryptedEmailContent = connectionSocket.recv(contentLen + (contentLen % 32))
-    emailContent = unpad(cipherAES.decrypt(encryptedEmailContent), 32).decode('ascii')
+    encryptedEmailContent = connectionSocket.recv(contentLen)
+    decryptedEmailContent = cipherAES.decrypt(encryptedEmailContent).decode('ascii')
+    # emailContent = unpad(decryptedEmailContent, 32).decode('ascii')
     
     # add a time stamp to the email
     timestamp = datetime.datetime.now()
@@ -108,7 +110,7 @@ def sendEmailHandler(connectionSocket, cipherAES, sender):
             f.write(f"To: {';'.join(destinations)}\n")
             f.write(f"Time and Date: {timestamp}\n")
             f.write(emailHeaderContent[emailHeaderContent.index("Title:"):])
-            f.write(emailContent)
+            f.write(decryptedEmailContent)
     
     print(f"An email from {sender} is sent to {';'.join(destinations)} has a content length of {contentLen}")
 
@@ -127,7 +129,7 @@ def inboxListHandler(connectionSocket, cipherAES, username):
             timestamp = lines[2].split(': ')[1].strip()
             title = lines[3].split(': ')[1].strip()
             # emails.append(f"{len(emails)+1} {sender} {timestamp} {title}")
-            emails.append(f"{len(emails)+1:<6} {sender:<8} {timestamp:<26} {title:<6}")
+            emails.append(f"{len(emails)+1:<10} {sender:<12} {timestamp:<30} {title:<6}")
     
     inboxList = '\n'.join(emails)
     connectionSocket.send(cipherAES.encrypt(inboxList.encode('ascii').ljust(4096)))

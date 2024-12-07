@@ -25,7 +25,7 @@ saves a few seconds for pasting the code into each subdirectory when we make cha
         for client_dir in client_dirs:
             dest_dir = os.path.join(base_dir, client_dir)
             dest_path = os.path.join(dest_dir, "Client.py")
-            dest_path2 = os.path.join(dest_dir, "Cleint_enhanced.py")
+            dest_path2 = os.path.join(dest_dir, "Client_enhanced.py")
             
             if not os.path.exists(dest_dir):
                 print(f"Warning: Directory {dest_dir} does not exist, creating it...")
